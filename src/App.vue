@@ -1,17 +1,18 @@
 <template>
   <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js App"/>
+    <button @click="subscribe">SUBSCRIBE</button>
   </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
+const {subscribe} = require('./Observer');
 
 export default {
   name: 'app',
-  components: {
-    HelloWorld
+  methods: {
+    subscribe() {
+      subscribe('offer', 'sdp');
+    }
   }
 }
 </script>
