@@ -1,9 +1,19 @@
 
-const SignalEmitter = function() {
-  this.events = {}
+const SignalEmitter = function(url) {
+  this.events = {};
+  this.connection = new WebSocket(url);
+
+  this.connection.onerror = err => console.log(`WebSocket error: ${error}`);
+
+  this.connection.onmessage = e => {
+
+    const {event, data} = JSON.parse(e.data);
+    this.emit(event, data);
+  }
 };
 
 SignalEmitter.prototype.on = function(event, callback) {
+
   if (this.events[event]) {
     this.events[event].push(callback);
   } else {
@@ -17,32 +27,9 @@ SignalEmitter.prototype.emit = function(event, ...data) {
   }
 };
 
-SignalEmitter.prototype.subscribe = async function (key) {
-  return fetch('http://localhost:3000/subscribe', {
-    method: 'POST',
-    body: JSON.stringify({
-      key
-    })
-  })
-    .then(res => res.json())
-    .then( (res) => {
-      if (res.event) {
-        this.emit(res.event.event, res.event.data);
-      }
-      this.subscribe(key);
-    });
+SignalEmitter.prototype.send = function(event, data) {
+  console.log('send_: ', event);
+  this.connection.send(JSON.stringify({event, data}));
 };
 
-SignalEmitter.prototype.send = async (key, event, data) => {
-  let res = await fetch('http://localhost:3000/send', {
-    method: 'POST',
-    body: JSON.stringify({
-      key,
-      event,
-      data
-    })
-  });
-  return await res.json();
-};
-
-export default new SignalEmitter();
+export default SignalEmitter;

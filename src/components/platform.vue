@@ -6,7 +6,6 @@
 </template>
 
 <script>
-  import SignalEmitter from '../SignalEmitter';
   import RTC from '../RTC';
 
   export default {
@@ -17,8 +16,8 @@
       }
     },
     created() {
+
       const webrtc = new RTC(false);
-      SignalEmitter.subscribe('platform');
     }
   }
 </script>

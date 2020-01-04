@@ -1,4 +1,5 @@
 import SignalEmitter from './SignalEmitter';
+const se = new SignalEmitter('ws://localhost:3001/');
 
 const config = {
   iceServers: [
@@ -12,13 +13,15 @@ const config = {
 };
 
 export default class RTC {
-  constructor(isControl) {
+  constructor(isControl, videoStreamCallback, dataChannelCallback) {
+    console.log('isControl: ', isControl);
     this.isControl = isControl;
+    this.videoStreamCallback = videoStreamCallback;
+    this.dataChannelCallback = dataChannelCallback;
     this.pc = new RTCPeerConnection(config);
     this.pc.onicecandidate = evt => {
       if(evt.candidate) {
-        console.log('localCandidate: ', evt.candidate);
-        SignalEmitter.send(isControl ? 'control' : 'platform', 'ICE', evt.candidate);
+        se.send('ICE', evt.candidate);
       }
     };
     this.pc.onconnection = () => {
@@ -27,15 +30,15 @@ export default class RTC {
     this.pc.onclosedconnection = () => {
       console.log('Disconnected');
     };
+    this.pc.addEventListener('track', e => {
+      this.videoStreamCallback(e.streams[0]);
+    });
     if (isControl) {
-      console.log('CREATE');
       this.channel = this.pc.createDataChannel('RTCDataChannel');
       this.channel.onopen = () => {
-        console.log('TEST');
-        setInterval(() => {
-          console.log('___');
-          this.channel.send('HI! PLATFORM');
-        }, 5000);
+        console.log('RTCDataChannel open');
+        this.dataChannelCallback(this.channel);
+
       };
       this.channel.onclose = () => console.log('Channel closed');
       this.channel.onerror = err => console.log('Channel error:', err);
@@ -45,20 +48,17 @@ export default class RTC {
         this.channel = e.channel;
         this.channel.onopen = () => {
           console.log('TEST');
-          setInterval(() => {
-            this.channel.send('HI, control! ');
-          }, 5000);
         };
         this.channel.onclose = () => console.log('Channel closed');
         this.channel.onerror = err => console.log('Channel error:', err);
         this.channel.onmessage = e => console.log('Incoming message:', e.data);
       };
     }
-    SignalEmitter.on('SDP', (sdp) => {
+    se.on('SDP', sdp => {
       console.log('SDP CANDIDATE: ', sdp);
       this._setRemoteSDP(sdp);
     });
-    SignalEmitter.on('ICE', (ice) => {
+    se.on('ICE', ice => {
       console.log('ICE CANDIDATE: ', ice);
       this.pc.addIceCandidate(new RTCIceCandidate(ice));
     });
@@ -75,31 +75,41 @@ export default class RTC {
     });
   }
 
-  createOffer() {
-    return this.pc.createOffer()
+  async createOffer() {
+    //await this._addStream();
+    return this.pc.createOffer({offerToReceiveVideo: true})
       .then(offer => {
       this.pc.setLocalDescription(offer);
       return offer;
     })
       .then(offer => {
-        SignalEmitter.send('control', 'SDP', offer);
+        se.send('SDP', offer);
       })
       .catch(err => console.error(err));
   }
 
-  createAnswer() {
+  async createAnswer() {
+    await this._addStream();
     this.pc.createAnswer()
       .then( answer => {
         this.pc.setLocalDescription(answer);
         return answer;
       })
       .then(answer => {
-        SignalEmitter.send('platform', 'SDP', answer);
+        se.send('SDP', answer);
       })
   }
 
-  async getAnswer() {
-
+  async _addStream() {
+    return navigator.mediaDevices.getUserMedia({video: true, audio: false})
+      .then(stream => {
+        console.log('stream: ', stream);
+        stream.getTracks().forEach(track => this.pc.addTrack(track, stream));
+      })
+      .catch(function(err) {
+        console.log(err);
+        /* handle the error */
+      });
   }
 }
 
