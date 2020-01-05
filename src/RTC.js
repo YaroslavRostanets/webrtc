@@ -1,16 +1,9 @@
+import {SIGNAL_SERVER, PLATFORM_SOCKET} from '../config';
 import SignalEmitter from './SignalEmitter';
-const se = new SignalEmitter('ws://localhost:3001/');
-
-const config = {
-  iceServers: [
-    {
-      urls: ["stun: stun1.l.google.com:19302",
-        "stun: stun1.voiceeclipse.net:3478",
-        "stun: stun2.l.google.com:19302",
-        "stun: stun3.l.google.com:19302"]
-    },
-  ]
-};
+import {platformSocket} from './platformSocket';
+import {config} from './rtcConfig';
+console.log(SIGNAL_SERVER, PLATFORM_SOCKET);
+const se = new SignalEmitter(SIGNAL_SERVER);
 
 export default class RTC {
   constructor(isControl, videoStreamCallback, dataChannelCallback) {
@@ -35,23 +28,20 @@ export default class RTC {
     });
     if (isControl) {
       this.channel = this.pc.createDataChannel('RTCDataChannel');
-      this.channel.onopen = () => {
-        console.log('RTCDataChannel open');
-        this.dataChannelCallback(this.channel);
-
-      };
+      this.channel.onopen = () => this.dataChannelCallback(this.channel);
       this.channel.onclose = () => console.log('Channel closed');
       this.channel.onerror = err => console.log('Channel error:', err);
       this.channel.onmessage = e => console.log('Incoming message:', e.data);
     } else {
       this.pc.ondatachannel = (e) => {
         this.channel = e.channel;
-        this.channel.onopen = () => {
-          console.log('TEST');
-        };
+        this.channel.onopen = () => console.log('Channel open');
         this.channel.onclose = () => console.log('Channel closed');
         this.channel.onerror = err => console.log('Channel error:', err);
-        this.channel.onmessage = e => console.log('Incoming message:', e.data);
+        this.channel.onmessage = (e) => {
+          console.log('I: ', e.data);
+          this._parseControlMessage(e);
+        };
       };
     }
     se.on('SDP', sdp => {
@@ -76,40 +66,46 @@ export default class RTC {
   }
 
   async createOffer() {
-    //await this._addStream();
     return this.pc.createOffer({offerToReceiveVideo: true})
       .then(offer => {
       this.pc.setLocalDescription(offer);
       return offer;
     })
-      .then(offer => {
-        se.send('SDP', offer);
-      })
+      .then(offer => se.send('SDP', offer))
       .catch(err => console.error(err));
   }
 
   async createAnswer() {
     await this._addStream();
+    this.platformSocket = await platformSocket(PLATFORM_SOCKET);
+    console.log('platformSocket: ', this.platformSocket);
     this.pc.createAnswer()
       .then( answer => {
         this.pc.setLocalDescription(answer);
         return answer;
       })
-      .then(answer => {
-        se.send('SDP', answer);
-      })
+      .then(answer => se.send('SDP', answer))
   }
 
   async _addStream() {
     return navigator.mediaDevices.getUserMedia({video: true, audio: false})
       .then(stream => {
-        console.log('stream: ', stream);
         stream.getTracks().forEach(track => this.pc.addTrack(track, stream));
       })
       .catch(function(err) {
         console.log(err);
-        /* handle the error */
       });
+  }
+
+  _parseControlMessage(e) {
+    //const message = JSON.parse(e.data);
+    console.log('MESSAGE: ', e.data);
+    console.log('SOCKET: ', this.platformSocket);
+    if(this.platformSocket && this.platformSocket.send) {
+
+      this.platformSocket.send(e.data);
+    }
+
   }
 }
 

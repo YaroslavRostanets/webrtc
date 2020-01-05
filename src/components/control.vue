@@ -59,8 +59,11 @@
       },
       run() {
         setInterval(() => {
-          const power = floor(this.power * 0.01);
-          console.log([this.leftCat * this.forward * power, this.rightCat * this.forward * power]);
+          const power = this.power * 0.01;
+          const direction = this.forward || this.back;
+          const left = floor(this.leftCat * direction * power);
+          const right = floor(this.rightCat * direction * power);
+          this.channel.send(JSON.stringify([left, right]));
         }, 100);
       }
     },
@@ -91,7 +94,7 @@
           return;
         }
         if (event.keyCode === 87) this.forward = 1;
-        if (event.keyCode === 83) this.back = 1;
+        if (event.keyCode === 83) this.back = -1;
         //console.log(event);
       });
     },
